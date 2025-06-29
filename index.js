@@ -424,19 +424,19 @@ client.on("messageCreate", async (message) => {
     }
   }
   // Step 2：有提到「周聿白」或 @bot 才觸發模糊回覆
-  const isCallingBot = content.includes("周聿白","聿白","白白") || message.mentions.has(client.user);
-  if (!isCallingBot) return;
+  const isCallingBot = ["周聿白", "聿白", "白白"].some(name => content.includes(name));
+if (!isCallingBot) return;
 
-  for (const item of keywordReplies) {
-    if (!item.exact) {
-      for (const trigger of item.triggers) {
-        if (sanitize(content).includes(sanitize(trigger))) {
-          const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-          return message.reply(reply);
-        }
+for (const item of keywordReplies) {
+  if (!item.exact) {
+    for (const trigger of item.triggers) {
+      if (sanitize(content).includes(sanitize(trigger))) {
+        const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
+        return message.reply(reply);
       }
     }
   }
+}
   });
 client.on("messageDelete", (msg) => {
   if (
