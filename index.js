@@ -137,6 +137,15 @@ const client = new Client({
   ]
 },
       {
+  exact: true,
+  triggers: ["聿白"],
+  replies: [
+    "「叫我名字，是想試探我對妳有沒有反應？」",
+    "「聿白……妳這樣喊，聽起來像在撒嬌，但我不吃那一套。」",
+    "「名字喊得越熟，距離反而越遠——妳懂這意思嗎？」"
+  ]
+},
+      {
   exact: false,
   triggers: ["親親", "來親我", "給我親", "我要親親"],
   replies: [
@@ -415,7 +424,7 @@ client.on("messageCreate", async (message) => {
     }
   }
   // Step 2：有提到「周聿白」或 @bot 才觸發模糊回覆
-  const isCallingBot = content.includes("周聿白") || message.mentions.has(client.user);
+  const isCallingBot = content.includes("周聿白","聿白","白白") || message.mentions.has(client.user);
   if (!isCallingBot) return;
 
   for (const item of keywordReplies) {
