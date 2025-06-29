@@ -288,7 +288,7 @@ const client = new Client({
     "「撩妳可以，但他撩得比我狠嗎？」",
     "「妳被撩的樣子，我想看——然後讓他後悔。」"
   ]
-}，
+},
 {
   exact: false,
   triggers: ["有人搭訕"],
