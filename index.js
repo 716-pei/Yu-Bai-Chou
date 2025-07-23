@@ -723,7 +723,7 @@ if (!aiResponded) {
     }
     if (aiResponded) break;
   }
-}
+});
 client.on("messageDelete", (msg) => {
   if (
     !msg.partial &&
