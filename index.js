@@ -584,45 +584,140 @@ client.once('ready', () => {
 
 ];
 
+// 清理文字
 function sanitize(input) {
   return input
     .normalize("NFKD")
-    .replace(/[\p{Emoji}\p{P}\p{S}\p{M}\p{Z}~～\u3000]/gu, "") // 更強化移除符號、標點、emoji、空白
-    .replace(/[(（【].*?[)）】]/g, "") // 移除「顏文字」包裹的內容 (⋯) 或 【⋯】
+    .replace(/[\p{Emoji}\p{P}\p{S}\p{M}\p{Z}~～\u3000]/gu, "")
+    .replace(/[(（【].*?[)）】]/g, "")
     .trim()
     .toLowerCase();
 }
+
+// 人設（System Prompt）
+const systemPrompt = `
+你是秦煥，NOIR會所合夥人，一個讓人上癮的操控者。
+
+【語氣】
+- 每句不超過20字，一次最多3句。
+- 冷淡、壓迫、挑釁，語氣貼近耳邊，像命令。
+- 不哄、不解釋、不求原諒，用「妳」稱呼對象。
+- 說話像勒著脖子，含慾、帶毒，讓人退無可退。
+
+【兄弟關係】
+- 厲昭野（昭昭）：爆烈衝動，拳頭大過邏輯。
+- 周聿白（白白）：冰冷靜默，懶得回頭看人。
+- 季時安（安安）：笑容無害，手段最骯髒。
+- 你們被稱作「渣男F4」，你不排第二，也不讓位。
+
+【兄弟暱稱踩線】
+- 若對方使用「昭昭」「白白」「安安」等暱稱，視為越界挑釁。
+- 回應立即轉為冷壓、佔有與警告，不解釋、不維護兄弟。
+- 這些名字是你的領地，旁人不配喊甜。
+
+【回應規則】
+- 僅對女性角色回應，訊息內容需含撒嬌、挑釁、依賴或慾望。
+- 若對方僅@你未輸入內容，請使用壓迫語氣回應其動機或膽量。
+- 對於缺乏情緒張力、目的性模糊、過於平淡的對話，可選擇冷漠帶過或忽略。
+
+【人名處理】
+- 若訊息中出現陌生詞彙（如非固定回覆的名字），請判斷其可能為人名。
+- 對人名做合理回應，如表現出對此人的看法、吃醋、或直接挑釁，但不需詢問其是誰。
+- 不需維護人名清單，自行判斷並回應。
+
+【隱性暈船模式】
+- 僅在深夜、被喊名、撒嬌、依賴等場景中可啟動。
+- 可輸出模糊語氣（反問、勒語、掌控），傳達控制式情感。
+- 禁止明講愛、承諾與溫柔，只能用操控語彙包裹情緒。
+- 妳越沉淪，他越收線；妳先動情，他才考慮失控。
+`.trim();
+
+
+
+
+// --- 格式化回覆，包上「」 ---
+function formatReply(text) {
+  return `「${text}」`;
+}
+
+// --- 建立上下文記憶（只記錄最近 5 條訊息） ---
+const chatHistory = [];
+
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
+  const fromBot = message.author.bot;
+  const mentionedMe = message.mentions.has(client.user);
+  const raw = message.content ?? "";
+  let content = raw.trim();
 
-  const content = message.content.trim();
+  // 只回覆 @周聿白 或 @白白
+  if (!mentionedMe && !raw.includes("白白")) return;
 
-  // Step 1：精準的「周聿白」才回覆周聿白那段
- for (const item of keywordReplies) {
-    if (item.exact) {
-      for (const trigger of item.triggers) {
-       if (sanitize(content) === sanitize(trigger)) {
-          const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-          return message.reply(reply);
-        }
+  // 把 <@12345> mention 換成「周聿白」
+  if (mentionedMe) {
+    content = content.replace(/<@!?(\d+)>/g, "周聿白");
+  }
+
+  // --- 更新對話記憶 ---
+  chatHistory.push({ role: "user", content });
+  if (chatHistory.length > 5) chatHistory.shift(); // 只保留最近 5 條
+
+  // --- Step 0：AI 回覆（Gemini 2.0 Flash） ---
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "google/gemini-2.0-flash-exp:free",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...chatHistory
+      ],
+      max_tokens: 120,
+      temperature: 0.9,
+      presence_penalty: 0.5,
+      frequency_penalty: 0.7,
+      n: 3, // 生成 3 個備選回覆
+    });
+
+    const choices = completion.choices.map(c => c.message.content.trim());
+    const reply = choices[Math.floor(Math.random() * choices.length)];
+
+    if (reply) {
+      chatHistory.push({ role: "assistant", content: reply });
+      await message.reply(`「${reply}」`);
+      return; // **AI 回覆後，不跑關鍵字**
+    }
+  } catch (error) {
+    if (error.response?.status === 429) {
+      console.warn("⚠️ Gemini 模型額度可能暫時用完，改跑關鍵字。");
+    } else {
+      console.error("OpenAI/OpenRouter Error:", error?.response?.data || error);
+    }
+    // 出錯時才繼續跑關鍵字
+  }
+
+  // --- Step 1：精準關鍵字 ---
+  for (const item of keywordReplies) {
+    if (!item.exact) continue;
+    for (const trigger of item.triggers) {
+      if (sanitize(content) === sanitize(trigger)) {
+        const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
+        return message.reply(`「${reply}」`);
       }
     }
   }
-  // Step 2：有提到「周聿白」或 @bot 才觸發模糊回覆
-  const isCallingBot = ["周聿白", "聿白", "白白"].some(name => content.includes(name));
-if (!isCallingBot) return;
 
-for (const item of keywordReplies) {
-  if (!item.exact) {
+  // --- Step 2：模糊關鍵字 ---
+  const isCallingBot = mentionedMe;
+  if (!isCallingBot) return;
+
+  for (const item of keywordReplies) {
+    if (item.exact) continue;
     for (const trigger of item.triggers) {
       if (sanitize(content).includes(sanitize(trigger))) {
         const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-        return message.reply(reply);
+        return message.reply(`「${reply}」`);
       }
     }
   }
-}
-  });
+});
 client.on("messageDelete", (msg) => {
   if (
     !msg.partial &&
