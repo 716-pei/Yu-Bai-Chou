@@ -1,20 +1,23 @@
+// 開頭 (Express + Discord client)
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('周聿白在線上～陪你貼貼(*´∀`)~♥'));
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ 周聿白醒著喔！伺服器在 ${PORT} 上啟動成功`);
 });
 
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const axios = require('axios');
 const { OpenAI } = require("openai");
+
+// 使用 OpenRouter API
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,  // ← 若要改名，記得改 .env & 這裡
+  baseURL: "https://openrouter.ai/api/v1",
 });
 
+// 建立 Discord Client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -23,9 +26,9 @@ const client = new Client({
   ],
 });
 
-    client.once('ready', () => {
-      console.log(`周聿白上線囉～帳號：${client.user.tag}`);
-    });
+client.once('ready', () => {
+  console.log(`周聿白上線囉～帳號：${client.user.tag}`);
+});
 
     const keywordReplies = [
   {
