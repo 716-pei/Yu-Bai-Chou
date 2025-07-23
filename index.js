@@ -661,63 +661,69 @@ client.on("messageCreate", async (message) => {
   chatHistory.push({ role: "user", content });
   if (chatHistory.length > 5) chatHistory.shift(); // 只保留最近 5 條
 
-  // --- Step 0：AI 回覆（Gemini 2.0 Flash） ---
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "google/gemini-2.0-flash-exp:free",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...chatHistory
-      ],
-      max_tokens: 120,
-      temperature: 0.9,
-      presence_penalty: 0.5,
-      frequency_penalty: 0.7,
-      n: 3, // 生成 3 個備選回覆
-    });
+// --- Step 0：AI 回覆（Gemini 2.0 Flash） ---
+let aiResponded = false;
+try {
+  const completion = await openai.chat.completions.create({
+    model: "google/gemini-2.0-flash-exp:free",
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...chatHistory
+    ],
+    max_tokens: 120,
+    temperature: 0.9,
+    presence_penalty: 0.5,
+    frequency_penalty: 0.7,
+    n: 3,
+  });
 
-    const choices = completion.choices.map(c => c.message.content.trim());
-    const reply = choices[Math.floor(Math.random() * choices.length)];
+  const choices = completion.choices.map(c => c.message.content.trim());
+  const reply = choices[Math.floor(Math.random() * choices.length)];
 
-    if (reply) {
-      chatHistory.push({ role: "assistant", content: reply });
-      await message.reply(`「${reply}」`);
-      return; // **AI 回覆後，不跑關鍵字**
-    }
-  } catch (error) {
-    if (error.response?.status === 429) {
-      console.warn("⚠️ Gemini 模型額度可能暫時用完，改跑關鍵字。");
-    } else {
-      console.error("OpenAI/OpenRouter Error:", error?.response?.data || error);
-    }
-    // 出錯時才繼續跑關鍵字
+  if (reply) {
+    chatHistory.push({ role: "assistant", content: reply });
+    await message.reply(`「${reply}」`);
+    aiResponded = true;
   }
+} catch (error) {
+  if (error.response?.status === 429) {
+    console.warn("⚠️ Gemini 模型額度暫時用完，嘗試關鍵字回覆");
+  } else {
+    console.error("OpenAI/OpenRouter Error:", error?.response?.data || error);
+  }
+}
 
-  // --- Step 1：精準關鍵字 ---
+// --- Step 1：如果 AI 沒回覆，跑精準關鍵字 ---
+if (!aiResponded) {
   for (const item of keywordReplies) {
     if (!item.exact) continue;
     for (const trigger of item.triggers) {
       if (sanitize(content) === sanitize(trigger)) {
         const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-        return message.reply(`「${reply}」`);
+        await message.reply(`「${reply}」`);
+        aiResponded = true;
+        break;
       }
     }
+    if (aiResponded) break;
   }
+}
 
-  // --- Step 2：模糊關鍵字 ---
-  const isCallingBot = mentionedMe;
-  if (!isCallingBot) return;
-
+// --- Step 2：如果還沒回覆，跑模糊關鍵字 ---
+if (!aiResponded) {
   for (const item of keywordReplies) {
     if (item.exact) continue;
     for (const trigger of item.triggers) {
       if (sanitize(content).includes(sanitize(trigger))) {
         const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-        return message.reply(`「${reply}」`);
+        await message.reply(`「${reply}」`);
+        aiResponded = true;
+        break;
       }
     }
+    if (aiResponded) break;
   }
-});
+}
 client.on("messageDelete", (msg) => {
   if (
     !msg.partial &&
