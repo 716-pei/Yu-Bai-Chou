@@ -635,21 +635,17 @@ const systemPrompt = `
 
 
 
-// --- 格式化回覆，包上「」 ---
-function formatReply(text) {
-  return `「${text}」`;
-}
-
-// --- 建立上下文記憶（只記錄最近 5 條訊息） ---
+// --- 建立上下文記憶（只記錄最近 5 條 AI 對話） ---
 const chatHistory = [];
 
 client.on("messageCreate", async (message) => {
-  const fromBot = message.author.bot;
+  if (message.author.bot) return;
+
   const mentionedMe = message.mentions.has(client.user);
   const raw = message.content ?? "";
   let content = raw.trim();
 
-  // 只回覆 @周聿白 或 @白白
+  // 只回覆 @周聿白 或 "白白"
   if (!mentionedMe && !raw.includes("白白")) return;
 
   // 把 <@12345> mention 換成「周聿白」
@@ -657,12 +653,9 @@ client.on("messageCreate", async (message) => {
     content = content.replace(/<@!?(\d+)>/g, "周聿白");
   }
 
-  // --- 更新對話記憶 ---
-  chatHistory.push({ role: "user", content });
-  if (chatHistory.length > 5) chatHistory.shift(); // 只保留最近 5 條
+  let aiResponded = false;
 
   // --- Step 0：AI 回覆（Gemini 2.0 Flash） ---
-  let aiResponded = false;
   try {
     const completion = await openai.chat.completions.create({
       model: "google/gemini-2.0-flash-exp:free",
@@ -681,9 +674,11 @@ client.on("messageCreate", async (message) => {
     const reply = choices[Math.floor(Math.random() * choices.length)];
 
     if (reply) {
-      chatHistory.push({ role: "assistant", content: reply });
       await message.reply(`「${reply}」`);
       aiResponded = true;
+      chatHistory.push({ role: "user", content });
+      chatHistory.push({ role: "assistant", content: reply });
+      if (chatHistory.length > 10) chatHistory.shift(); // 只保留最近 10 條對話
     }
   } catch (error) {
     if (error.response?.status === 429) {
@@ -701,11 +696,9 @@ client.on("messageCreate", async (message) => {
         if (sanitize(content) === sanitize(trigger)) {
           const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
           await message.reply(`「${reply}」`);
-          aiResponded = true;
-          break;
+          return; // 關鍵字回覆後直接結束，不寫入 chatHistory
         }
       }
-      if (aiResponded) break;
     }
   }
 
@@ -717,14 +710,12 @@ client.on("messageCreate", async (message) => {
         if (sanitize(content).includes(sanitize(trigger))) {
           const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
           await message.reply(`「${reply}」`);
-          aiResponded = true;
-          break;
+          return; // 關鍵字回覆後直接結束，不寫入 chatHistory
         }
       }
-      if (aiResponded) break;
     }
   }
-});  // ← 只需要這一個
+});
 
 client.on("messageDelete", (msg) => {
   if (
