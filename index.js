@@ -670,92 +670,80 @@ const recentlyResponded = new Set(); // 防止重複回應
 
 // ✅ 判斷是否為「@周聿白」或「@周聿白#2058」提及
 function isExplicitMention(message) {
-  return message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
+    return message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 }
-
 client.on("messageCreate", async (message) => {
   const raw = message.content ?? "";
   const fromBot = message.author.bot;
   const fromSelf = message.author.id === client.user.id;
   const mentionRegex = /周聿白/;
-const mentionedMe = message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
+  const mentionedMe = message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 
-
-  // ✅ 檢查：其他 Bot + 非自己 + 有提到周聿白 + 引用了某訊息
+  // ✅ 處理：Bot 引用使用者提到秦煥的訊息
   if (fromBot && !fromSelf && mentionRegex.test(raw) && message.reference?.messageId) {
     try {
-      // 抓被引用的訊息
       const quotedMessage = await message.channel.messages.fetch(message.reference.messageId);
       if (!quotedMessage) return;
 
-      // ✅ 檢查：被引用的是人類用戶、內容含「周聿白」
       const quotedRaw = quotedMessage.content ?? "";
       const isFromUser = !quotedMessage.author.bot;
       const quotedMentionedQinhuan = mentionRegex.test(quotedRaw);
       if (!isFromUser || !quotedMentionedQinhuan) return;
 
-      // ✅ 檢查是否已回應過，避免 spam
       if (recentlyResponded.has(message.id)) return;
       recentlyResponded.add(message.id);
-      setTimeout(() => recentlyResponded.delete(message.id), 3000); // 3 秒內不重複回應
+      setTimeout(() => recentlyResponded.delete(message.id), 3000);
 
-      // ✅ 清理內容給 AI 用
       const content = sanitize(raw).slice(0, 100);
       chatHistory.push({ role: "user", content });
       if (chatHistory.length > 5) chatHistory.shift();
       const fullContext = [...passiveMentionLog, ...chatHistory].slice(-5);
 
-      // ✅ 呼叫 OpenRouter Gemini API
       const completion = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-exp:free",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...fullContext
-          ],
+          messages: [{ role: "system", content: systemPrompt }, ...fullContext],
           max_tokens: 120,
           temperature: 0.9,
           presence_penalty: 0.5,
-          frequency_penalty: 0.7
-        })
+          frequency_penalty: 0.7,
+        }),
       });
 
       const result = await completion.json();
-      console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
+        console.log("🔧 OpenRouter 回傳結果（引用）：", result);
       const aiResponse = result.choices?.[0]?.message?.content?.trim();
 
       if (aiResponse) {
         const reply = formatReply(aiResponse);
-        await message.reply(reply); // ✅ 只回覆這個 bot 的訊息
+        await message.reply(reply);
+      } else {
+        await handleKeywordFallback(message, content);
       }
 
-      return; // ✅ 結束，避免掉到下面 @mention 主動區塊
+      return;
     } catch (err) {
       console.warn("⚠️ 無法處理引用訊息：", err);
+      return;
     }
   }
 
-
-  // ✅ 如果沒有顯式 @周聿白 或 @周聿白#2058，就不主動回覆
+  // ✅ 提及周聿白才回應
   if (!mentionedMe) return;
 
-  // ✅ 處理 @mention 清除 & fallback 空訊息
-  if (mentionedMe) {
-    content = raw
-      .replace(/<@!?(\d+)>/g, "")       // 清除使用者 mention
-      .replace(/<@&(\d+)>/g, "")        // 清除身分組 mention
-      .replace(/周聿白/g, "")            // 清除純文字周聿白
-      .trim();
+  let content = raw
+    .replace(/<@!?(\d+)>/g, "")
+    .replace(/<@&(\d+)>/g, "")
+    .replace(/周聿白/g, "")
+    .trim();
 
-    if (!content) content = "你在叫我嗎？";
-  }
+  if (!content) content = "你在叫我嗎？";
 
-  // ✅ 主動回應 @周聿白 的訊息
   chatHistory.push({ role: "user", content });
   if (chatHistory.length > 5) chatHistory.shift();
   const fullContext = [...passiveMentionLog, ...chatHistory].slice(-5);
@@ -764,42 +752,33 @@ const mentionedMe = message.mentions.has(client.user) || message.content.include
     const completion = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.0-flash-exp:free",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...fullContext
-        ],
+        messages: [{ role: "system", content: systemPrompt }, ...fullContext],
         max_tokens: 120,
         temperature: 0.9,
         presence_penalty: 0.5,
-        frequency_penalty: 0.7
-      })
+        frequency_penalty: 0.7,
+      }),
     });
 
- let aiResponded = false;
+    const result = await completion.json();
+      console.log("🔧 OpenRouter 回傳結果（提及）：", result);
+    const aiResponse = result.choices?.[0]?.message?.content?.trim();
 
-try {
-  const result = await completion.json();
-  console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
-
-  const aiResponse = result.choices?.[0]?.message?.content?.trim();
-  if (aiResponse) {
-    aiResponded = true;
-    const reply = formatReply(aiResponse);
-    await message.channel.send(reply);
+    if (aiResponse) {
+      const reply = formatReply(aiResponse);
+      await message.reply(reply);
+    } else {
+      await handleKeywordFallback(message, content);
+    }
+  } catch (err) {
+    console.error("❌ 無法處理回應：", err);
+    await handleKeywordFallback(message, content); // 捕捉錯誤也用關鍵字處理
   }
-} catch (error) {
-  aiResponded = false;
-  console.warn("❌ Gemini Flash 正式回覆錯誤：", error);
-  const fallback = keywordFallbackReply(content, mentionedMe ?? false);
-  if (fallback) {
-    await message.reply(`「${fallback}」`);
-  }
-}
 
 // --- 精準關鍵字 ---
 if (!aiResponded) {
@@ -829,7 +808,6 @@ if (!aiResponded) {
   }
 }
 
-});
 
 client.on("messageDelete", (msg) => {
   if (
