@@ -779,9 +779,10 @@ client.on("messageCreate", async (message) => {
     console.error("❌ 無法處理回應：", err);
     await handleKeywordFallback(message, content); // 捕捉錯誤也用關鍵字處理
   }
+});
 
-// --- 精準關鍵字 ---
-if (!aiResponded) {
+async function handleKeywordFallback(message, content) {
+ // --- 精準關鍵字 ---
   for (const item of keywordReplies) {
     if (!item.exact) continue;
     for (const trigger of item.triggers) {
@@ -792,10 +793,8 @@ if (!aiResponded) {
       }
     }
   }
-}
 
-// --- 模糊關鍵字 ---
-if (!aiResponded) {
+  // --- 模糊關鍵字 ---
   for (const item of keywordReplies) {
     if (item.exact) continue;
     for (const trigger of item.triggers) {
@@ -806,8 +805,6 @@ if (!aiResponded) {
       }
     }
   }
-}
-
 
 client.on("messageDelete", (msg) => {
   if (
