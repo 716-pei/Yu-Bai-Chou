@@ -805,6 +805,7 @@ async function handleKeywordFallback(message, content) {
       }
     }
   }
+   }
 
 client.on("messageDelete", (msg) => {
   if (
