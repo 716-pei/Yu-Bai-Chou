@@ -1,23 +1,24 @@
-// 開頭 (Express + Discord client)
-const express = require('express');
-const app = express();
-app.get('/', (req, res) => res.send('周聿白在線上～陪你貼貼(*´∀`)~♥'));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ 周聿白醒著喔！伺服器在 ${PORT} 上啟動成功`);
-});
-
+// --- 環境變數與套件 ---
 require('dotenv').config();
+const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
-const { OpenAI } = require("openai");
+const { OpenAI } = require('openai');
 
-// 使用 OpenRouter API
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,  // ← 若要改名，記得改 .env & 這裡
-  baseURL: "https://openrouter.ai/api/v1",
+// --- 啟動 Express (存活檢測用) ---
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('周聿白在線上～陪你貼貼(*´∀`)~♥'));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ 伺服器在 ${PORT} 埠口啟動成功`);
 });
 
-// 建立 Discord Client
+// --- 使用 OpenRouter API ---
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,  // .env 中必須設定 OPENAI_API_KEY
+  baseURL: 'https://openrouter.ai/api/v1',
+});
+
+// --- 建立 Discord Client ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -27,8 +28,13 @@ const client = new Client({
 });
 
 client.once('ready', () => {
-  console.log(`周聿白上線囉～帳號：${client.user.tag}`);
+  console.log(`🚀 周聿白上線囉～登入帳號：${client.user.tag}`);
 });
+
+// --- 最後登入 Discord ---
+client.login(process.env.DISCORD_BOT_TOKEN);
+
+// 關鍵字回應陣列
 
     const keywordReplies = [
   {
@@ -599,7 +605,7 @@ const systemPrompt = `
 你是周聿白，娛樂圈最難靠近的操控者，NOIR會所合夥人。
 
 【語氣風格】
-- 每句不超過20字，一次最多3句。
+- 每句不超過20字，一次1句。
 - 聲音溫柔低沉，語速偏慢，語氣平穩卻帶距離與壓力。
 - 所有溫柔皆為手段，從不動情，也從不哄人。
 - 使用「妳」稱呼對象，語句曖昧帶刺，讓人誤以為被放進心裡。
@@ -635,58 +641,162 @@ const systemPrompt = `
 
 
 
-// --- 建立上下文記憶（只記錄最近 5 條 AI 對話） ---
+// --- 格式化回覆，包上「」 ---
+function formatReply(text) {
+  return `「${text}」`;
+}
+
+// --- 🔧 防呆文字清理工具 ---
+function sanitize(input) {
+  return input
+    .normalize("NFKD")
+    .replace(/[\p{Emoji}\p{P}\p{S}\p{M}\p{Z}~～\u3000]/gu, "")
+    .replace(/[(（【].*?[)）】]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+// --- 建立上下文記憶（分開記錄） ---
 const chatHistory = [];
+const passiveMentionLog = [];
+
+const MAX_PASSIVE_LOG = 5;
+const BOT_REPLY_WINDOW_MS = 4000;
+
+const fetch = require("node-fetch");
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+const recentlyResponded = new Set(); // 防止重複回應
+
+// ✅ 判斷是否為「@周聿白」或「@周聿白#2058」提及
+function isExplicitMention(message) {
+  return message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
+}
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-
-  const mentionedMe = message.mentions.has(client.user);
   const raw = message.content ?? "";
-  let content = raw.trim();
+  const fromBot = message.author.bot;
+  const fromSelf = message.author.id === client.user.id;
+  const mentionRegex = /周聿白/;
+const mentionedMe = message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 
-  // 只回覆 @周聿白 或 "白白"
-  if (!mentionedMe && !raw.includes("白白")) return;
 
-  // 把 <@12345> mention 換成「周聿白」
-  if (mentionedMe) {
-    content = content.replace(/<@!?(\d+)>/g, "周聿白");
+  // ✅ 檢查：其他 Bot + 非自己 + 有提到周聿白 + 引用了某訊息
+  if (fromBot && !fromSelf && mentionRegex.test(raw) && message.reference?.messageId) {
+    try {
+      // 抓被引用的訊息
+      const quotedMessage = await message.channel.messages.fetch(message.reference.messageId);
+      if (!quotedMessage) return;
+
+      // ✅ 檢查：被引用的是人類用戶、內容含「周聿白」
+      const quotedRaw = quotedMessage.content ?? "";
+      const isFromUser = !quotedMessage.author.bot;
+      const quotedMentionedQinhuan = mentionRegex.test(quotedRaw);
+      if (!isFromUser || !quotedMentionedQinhuan) return;
+
+      // ✅ 檢查是否已回應過，避免 spam
+      if (recentlyResponded.has(message.id)) return;
+      recentlyResponded.add(message.id);
+      setTimeout(() => recentlyResponded.delete(message.id), 3000); // 3 秒內不重複回應
+
+      // ✅ 清理內容給 AI 用
+      const content = sanitize(raw).slice(0, 100);
+      chatHistory.push({ role: "user", content });
+      if (chatHistory.length > 5) chatHistory.shift();
+      const fullContext = [...passiveMentionLog, ...chatHistory].slice(-5);
+
+      // ✅ 呼叫 OpenRouter Gemini API
+      const completion = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.0-flash-exp:free",
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...fullContext
+          ],
+          max_tokens: 120,
+          temperature: 0.9,
+          presence_penalty: 0.5,
+          frequency_penalty: 0.7
+        })
+      });
+
+      const result = await completion.json();
+      console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
+      const aiResponse = result.choices?.[0]?.message?.content?.trim();
+
+      if (aiResponse) {
+        const reply = formatReply(aiResponse);
+        await message.reply(reply); // ✅ 只回覆這個 bot 的訊息
+      }
+
+      return; // ✅ 結束，避免掉到下面 @mention 主動區塊
+    } catch (err) {
+      console.warn("⚠️ 無法處理引用訊息：", err);
+    }
   }
 
-  let aiResponded = false;
 
-  // --- Step 0：AI 回覆（Gemini 2.0 Flash） ---
+  // ✅ 如果沒有顯式 @周聿白 或 @周聿白#2058，就不主動回覆
+  if (!mentionedMe) return;
+
+  // ✅ 處理 @mention 清除 & fallback 空訊息
+  if (mentionedMe) {
+    content = raw
+      .replace(/<@!?(\d+)>/g, "")       // 清除使用者 mention
+      .replace(/<@&(\d+)>/g, "")        // 清除身分組 mention
+      .replace(/周聿白/g, "")            // 清除純文字周聿白
+      .trim();
+
+    if (!content) content = "你在叫我嗎？";
+  }
+
+  // ✅ 主動回應 @周聿白 的訊息
+  chatHistory.push({ role: "user", content });
+  if (chatHistory.length > 5) chatHistory.shift();
+  const fullContext = [...passiveMentionLog, ...chatHistory].slice(-5);
+
   try {
-    const completion = await openai.chat.completions.create({
-      model: "google/gemini-2.0-flash-exp:free",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...chatHistory
-      ],
-      max_tokens: 120,
-      temperature: 0.9,
-      presence_penalty: 0.5,
-      frequency_penalty: 0.7,
-      n: 1,
+    const completion = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.0-flash-exp:free",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...fullContext
+        ],
+        max_tokens: 120,
+        temperature: 0.9,
+        presence_penalty: 0.5,
+        frequency_penalty: 0.7
+      })
     });
 
-    const choices = completion.choices.map(c => c.message.content.trim());
-    const reply = choices[Math.floor(Math.random() * choices.length)];
-
-    if (reply) {
-      await message.reply(`「${reply}」`);
-      aiResponded = true;
-      chatHistory.push({ role: "user", content });
-      chatHistory.push({ role: "assistant", content: reply });
-      if (chatHistory.length > 10) chatHistory.shift(); // 只保留最近 10 條對話
+    const result = await completion.json();
+    console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
+    const aiResponse = result.choices?.[0]?.message?.content?.trim();
+    if (aiResponse) {
+      const reply = formatReply(aiResponse);
+      await message.channel.send(reply);
     }
   } catch (error) {
-    if (error.response?.status === 429) {
-      console.warn("⚠️ Gemini 模型額度暫時用完，嘗試關鍵字回覆");
-    } else {
-      console.error("OpenAI/OpenRouter Error:", error?.response?.data || error);
+    console.warn("❌ Gemini Flash 正式回覆錯誤：", error);
+    const fallback = keywordFallbackReply(content, mentionedMe);
+    if (fallback) {
+      await message.reply(`「${fallback}」`);
     }
   }
+});
+
+
 
   // --- Step 1：如果 AI 沒回覆，跑精準關鍵字 ---
   if (!aiResponded) {
@@ -758,6 +868,3 @@ client.on("messageUpdate", (oldMsg, newMsg) => {
     newMsg.channel.send(reply);
   }
 });
-
-const token = process.env.DISCORD_BOT_TOKEN;
-client.login(token);
