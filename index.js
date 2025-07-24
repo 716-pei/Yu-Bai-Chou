@@ -780,51 +780,55 @@ const mentionedMe = message.mentions.has(client.user) || message.content.include
       })
     });
 
-    const result = await completion.json();
-    console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
-    const aiResponse = result.choices?.[0]?.message?.content?.trim();
-    if (aiResponse) {
-      const reply = formatReply(aiResponse);
-      await message.channel.send(reply);
-    }
-  } catch (error) {
-    console.warn("❌ Gemini Flash 正式回覆錯誤：", error);
-    const fallback = keywordFallbackReply(content, mentionedMe);
-    if (fallback) {
-      await message.reply(`「${fallback}」`);
-    }
+ let aiResponded = false;
+
+try {
+  const result = await completion.json();
+  console.log("🧪 AI 回傳原始結果：", JSON.stringify(result, null, 2));
+
+  const aiResponse = result.choices?.[0]?.message?.content?.trim();
+  if (aiResponse) {
+    aiResponded = true;
+    const reply = formatReply(aiResponse);
+    await message.channel.send(reply);
   }
-});
+} catch (error) {
+  aiResponded = false;
+  console.warn("❌ Gemini Flash 正式回覆錯誤：", error);
+  const fallback = keywordFallbackReply(content, mentionedMe ?? false);
+  if (fallback) {
+    await message.reply(`「${fallback}」`);
+  }
+}
 
-
-
-  // --- Step 1：如果 AI 沒回覆，跑精準關鍵字 ---
-  if (!aiResponded) {
-    for (const item of keywordReplies) {
-      if (!item.exact) continue;
-      for (const trigger of item.triggers) {
-        if (sanitize(content) === sanitize(trigger)) {
-          const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-          await message.reply(`「${reply}」`);
-          return; // 關鍵字回覆後直接結束，不寫入 chatHistory
-        }
+// --- 精準關鍵字 ---
+if (!aiResponded) {
+  for (const item of keywordReplies) {
+    if (!item.exact) continue;
+    for (const trigger of item.triggers) {
+      if (sanitize(content) === sanitize(trigger)) {
+        const reply = randomChoice(item.replies);
+        await message.reply(`「${reply}」`);
+        return;
       }
     }
   }
+}
 
-  // --- Step 2：如果還沒回覆，跑模糊關鍵字 ---
-  if (!aiResponded) {
-    for (const item of keywordReplies) {
-      if (item.exact) continue;
-      for (const trigger of item.triggers) {
-        if (sanitize(content).includes(sanitize(trigger))) {
-          const reply = item.replies[Math.floor(Math.random() * item.replies.length)];
-          await message.reply(`「${reply}」`);
-          return; // 關鍵字回覆後直接結束，不寫入 chatHistory
-        }
+// --- 模糊關鍵字 ---
+if (!aiResponded) {
+  for (const item of keywordReplies) {
+    if (item.exact) continue;
+    for (const trigger of item.triggers) {
+      if (sanitize(content).includes(sanitize(trigger))) {
+        const reply = randomChoice(item.replies);
+        await message.reply(`「${reply}」`);
+        return;
       }
     }
   }
+}
+
 });
 
 client.on("messageDelete", (msg) => {
