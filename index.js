@@ -679,7 +679,7 @@ client.on("messageCreate", async (message) => {
   const mentionRegex = /周聿白/;
   const mentionedMe = message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 
-  // ✅ 處理：Bot 引用使用者提到秦煥的訊息
+  // ✅ 處理：Bot 引用使用者提到周聿白的訊息
   if (fromBot && !fromSelf && mentionRegex.test(raw) && message.reference?.messageId) {
     try {
       const quotedMessage = await message.channel.messages.fetch(message.reference.messageId);
@@ -706,7 +706,7 @@ client.on("messageCreate", async (message) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-exp:free",
+          model: "nous/hermes-2-pro-mistral:free",
           messages: [{ role: "system", content: systemPrompt }, ...fullContext],
           max_tokens: 120,
           temperature: 0.9,
@@ -756,7 +756,7 @@ client.on("messageCreate", async (message) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-exp:free",
+        model: "nous/hermes-2-pro-mistral:free",
         messages: [{ role: "system", content: systemPrompt }, ...fullContext],
         max_tokens: 120,
         temperature: 0.9,
