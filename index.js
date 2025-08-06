@@ -673,9 +673,6 @@ const recentlyResponded = new Set(); // 防止重複回應
 function isExplicitMention(message) {
     return message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 }
-function randomChoice(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 client.on("messageCreate", async (message) => {
   const raw = message.content ?? "";
@@ -786,6 +783,9 @@ client.on("messageCreate", async (message) => {
   }
 });
 
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 async function handleKeywordFallback(message, content) {
  // --- 精準關鍵字 ---
   for (const item of keywordReplies) {
