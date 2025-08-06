@@ -706,7 +706,7 @@ client.on("messageCreate", async (message) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "openai/gpt-3.5-turbo:free",
+          model: "mistralai/mixtral-8x7b-instruct",
           messages: [{ role: "system", content: systemPrompt }, ...fullContext],
           max_tokens: 120,
           temperature: 0.9,
@@ -756,7 +756,7 @@ client.on("messageCreate", async (message) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo:free",
+        model: "mistralai/mixtral-8x7b-instruct",
         messages: [{ role: "system", content: systemPrompt }, ...fullContext],
         max_tokens: 120,
         temperature: 0.9,
