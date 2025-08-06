@@ -708,7 +708,7 @@ client.on("messageCreate", async (message) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "deepseek/deepseek-r1-0528:free",
+          model: "qwen/qwq-32b:free",
           messages: [{ role: "system", content: systemPrompt }, ...fullContext],
           max_tokens: 120,
           temperature: 0.9,
@@ -758,7 +758,7 @@ client.on("messageCreate", async (message) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "deepseek/deepseek-r1-0528:free",
+        model: "qwen/qwq-32b:free",
         messages: [{ role: "system", content: systemPrompt }, ...fullContext],
         max_tokens: 120,
         temperature: 0.9,
