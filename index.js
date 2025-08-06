@@ -673,6 +673,10 @@ const recentlyResponded = new Set(); // 防止重複回應
 function isExplicitMention(message) {
     return message.mentions.has(client.user) || message.content.includes("@周聿白#2058");
 }
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 client.on("messageCreate", async (message) => {
   const raw = message.content ?? "";
   const fromBot = message.author.bot;
